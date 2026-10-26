@@ -1,4 +1,4 @@
-# EntePoojaBookin.in - Kerala Pooja Booking Website (Flask Prototype)
+# EntePoojaBooking.in - Kerala Pooja Booking Website (Flask Prototype)
 
 A runnable, responsive Flask implementation of the latest approved Aaradhya visual direction: ivory, deep maroon, brass gold, heritage temple imagery, elegant editorial typography, ritual discovery and booking journey.
 
