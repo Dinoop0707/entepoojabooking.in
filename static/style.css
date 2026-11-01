@@ -5,3 +5,14 @@
 
 /* Account, cart and invoice */
 .account-page{padding-top:65px;padding-bottom:85px}.account-page>p{margin-bottom:28px}.account-panel{margin-bottom:22px}.section-heading,.invoice-head,.booking-history,.bill-total{display:flex;justify-content:space-between;align-items:center;gap:20px}.section-heading{margin-bottom:18px}.section-heading h2{margin:0}.count-pill{font:500 13px 'DM Sans',sans-serif;color:#702c35}.booking-history{border-top:1px solid #e8d8be;padding:18px 0}.booking-history p{margin:5px 0;color:#77685c}.booking-history>div:last-child{text-align:right;display:flex;flex-direction:column;gap:6px}.bill-table-wrap{overflow-x:auto}.bill-table{border-collapse:collapse;width:100%;min-width:550px;margin:22px 0}.bill-table th{text-align:left;background:#f6eee3;color:#702c35}.bill-table td,.bill-table th{padding:16px 12px;border-bottom:1px solid #eadfd1}.bill-table p{margin:4px 0;color:#77685c}.bill-total{border-top:2px solid #702c35;padding:22px 0;font-size:20px}.bill-total strong{color:#702c35;font-size:27px}.qty-form{display:flex;gap:8px;align-items:center}.qty-form input,.cart-add-form input{max-width:80px;padding:9px;border:1px solid #dfd1bf;border-radius:7px}.qty-form button{padding:10px}.card-cart{margin-top:12px}.cart-add-form{margin:16px 0}.cart-add-form label{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.invoice-head{border-bottom:1px solid #e8d8be;padding-bottom:20px;margin-bottom:15px}.invoice-head p{margin:4px 0}.print-actions{margin-top:24px}@media(max-width:700px){.invoice-head,.booking-history,.section-heading{align-items:flex-start;flex-direction:column}.booking-history>div:last-child{text-align:left}.bill-total{font-size:16px}.bill-total strong{font-size:21px}}@media print{.site-header,.footer,.print-actions,.flash-messages{display:none!important}.account-page{padding:0}.account-panel{box-shadow:none;border:0}.invoice-panel{padding:0}}
+
+/* EntePooja animated SVG branding and page loader */
+.site-brand-logo{display:block;width:190px;height:64px;object-fit:contain;object-position:left center;flex-shrink:0}
+.footer .site-brand-logo{width:190px;height:70px;background:#fff8ed;border-radius:7px;padding:3px 7px;object-position:center}
+.site-loader{position:fixed;inset:0;z-index:9999;background:#fff8ed;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;opacity:1;visibility:visible;transition:opacity .4s ease,visibility .4s ease}
+.site-loader img{width:min(310px,80vw);height:auto;display:block}
+.loader-caption{font-family:var(--serif);font-size:14px;color:#8d6b46;letter-spacing:.4px}
+.site-loader.is-hidden{opacity:0;visibility:hidden;pointer-events:none}
+@media(max-width:820px){.site-brand-logo{width:155px;height:57px}.footer .site-brand-logo{width:180px;height:64px}}
+@media(max-width:560px){.site-brand-logo{width:135px;height:52px}.site-header .brand{gap:0}}
+@media(prefers-reduced-motion:reduce){.site-loader{transition:none}}
