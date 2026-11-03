@@ -1,9 +1,9 @@
 """Kerala pooja booking concept - local Flask demo. No live priest availability or payments."""
-import os, sqlite3, uuid, secrets, hmac, time
+import os, sqlite3, uuid, secrets, hmac, time, re, hashlib, logging
 from urllib.parse import urlsplit
 from datetime import datetime
 from pathlib import Path
-from flask import Flask, render_template, request, redirect, url_for, flash, abort, session, g
+from flask import Flask, render_template, request, redirect, url_for, flash, abort, session, g, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 import constants as site_config
 
@@ -26,6 +26,9 @@ BY_SLUG = {s['slug']:s for s in SERVICES}
 def init_db():
  with sqlite3.connect(DB) as con:
   con.execute('''CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, full_name TEXT NOT NULL, email TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, created_at TEXT NOT NULL)''')
+  columns=[r[1] for r in con.execute('PRAGMA table_info(users)')]
+  if 'phone' not in columns: con.execute('ALTER TABLE users ADD COLUMN phone TEXT')
+  con.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone ON users(phone) WHERE phone IS NOT NULL')
   con.execute('''CREATE TABLE IF NOT EXISTS cart_items (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id), service_slug TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 1 CHECK(quantity BETWEEN 1 AND 20), UNIQUE(user_id, service_slug))''')
   con.execute('''CREATE TABLE IF NOT EXISTS booking_orders (id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, created_at TEXT NOT NULL, total INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'Request received')''')
   con.execute('''CREATE TABLE IF NOT EXISTS order_items (id INTEGER PRIMARY KEY AUTOINCREMENT, order_id TEXT NOT NULL, service_slug TEXT NOT NULL, service_name TEXT NOT NULL, unit_price INTEGER NOT NULL, quantity INTEGER NOT NULL, line_total INTEGER NOT NULL)''')
@@ -62,7 +65,7 @@ def load_user():
   init_db()
   with sqlite3.connect(DB) as con:
    con.row_factory=sqlite3.Row
-   g.user=con.execute('SELECT id,full_name,email FROM users WHERE id=?',(session['user_id'],)).fetchone()
+   g.user=con.execute('SELECT id,full_name,email,phone FROM users WHERE id=?',(session['user_id'],)).fetchone()
   if not g.user: session.pop('user_id',None)
  if request.method=='POST' and not hmac.compare_digest(str(session.get('csrf_token','')),str(request.form.get('csrf_token',''))):
   abort(400,description='Invalid form token. Refresh the page and try again.')
@@ -71,54 +74,76 @@ def safe_next(target):
  if target and target.startswith('/') and not target.startswith('//') and not urlsplit(target).netloc: return target
  return url_for('account')
 
-@app.route('/register',methods=['GET','POST'])
-def register():
- if g.user: return redirect(url_for('account'))
- if request.method=='POST':
-  name=request.form.get('full_name','').strip(); email=request.form.get('email','').strip().lower();password=request.form.get('password','');confirm=request.form.get('confirm_password','')
-  if len(name)<2 or len(name)>100 or len(email)>254 or '@' not in email or '.' not in email.rsplit('@',1)[-1]:
-   flash('Please enter a valid name and email address.','error')
-  elif len(password)<10 or len(password)>128:
-   flash('Password must be between 10 and 128 characters.','error')
-  elif password!=confirm:
-   flash('Passwords do not match.','error')
-  else:
-   init_db()
-   try:
-    with sqlite3.connect(DB) as con:
-     cur=con.execute('INSERT INTO users(full_name,email,password_hash,created_at) VALUES(?,?,?,?)',(name,email,generate_password_hash(password),datetime.now().isoformat(timespec='seconds')))
-     user_id=cur.lastrowid
-   except sqlite3.IntegrityError: flash('An account with this email already exists. Please sign in.','error')
-   else:
-    session.clear();session['user_id']=user_id;session['csrf_token']=secrets.token_urlsafe(32)
-    flash('Your account has been created. Welcome!','success')
-    return redirect(url_for('account'))
- return render_template('register.html',active='account')
+# OTP authentication: configure an SMS gateway before enabling production use.
+# For local development only, codes are printed to the Flask server console.
+_otp_limits={}
+def _otp_error(message, status=400): return jsonify(ok=False,error=message),status
+def _otp_key(phone): return hashlib.sha256((app.secret_key+phone).encode()).hexdigest()
+def _phone(value):
+ digits=re.sub(r'\D','',value or '')
+ if len(digits)==10: digits='91'+digits
+ return '+'+digits if len(digits)==12 and digits.startswith('91') and digits[2] in '6789' else None
 
-# Basic in-memory rate limiting for local demos (use Redis/proxy limits for production).
-_login_attempts={}
-@app.route('/login',methods=['GET','POST'])
+@app.post('/auth/otp/send')
+def otp_send():
+ phone=_phone(request.form.get('phone')); mode=request.form.get('mode')
+ if not phone or mode not in ('register','login'): return _otp_error('Enter a valid Indian mobile number.')
+ init_db()
+ with sqlite3.connect(DB) as con:
+  con.row_factory=sqlite3.Row
+  existing=con.execute('SELECT id FROM users WHERE phone=?',(phone,)).fetchone()
+ if mode=='login' and not existing: return _otp_error('No account found for this mobile number. Please create an account.')
+ if mode=='register' and existing: return _otp_error('This mobile number is already registered. Please sign in.')
+ name=request.form.get('full_name','').strip();email=request.form.get('email','').strip().lower()
+ if mode=='register':
+  if not (2<=len(name)<=100 and len(email)<=254 and '@' in email and '.' in email.rsplit('@',1)[-1]): return _otp_error('Enter your name and a valid email address.')
+  with sqlite3.connect(DB) as con:
+   if con.execute('SELECT 1 FROM users WHERE email=?',(email,)).fetchone(): return _otp_error('This email is already registered. Please sign in.')
+ now=time.time(); key=_otp_key(phone); hits=[t for t in _otp_limits.get(key,[]) if now-t<3600]
+ if len(hits)>=5: return _otp_error('Too many OTP requests. Try again later.',429)
+ pending=session.get('otp_pending',{})
+ if pending.get('sent_at',0)+30>now: return _otp_error('Please wait 30 seconds before requesting another code.',429)
+ if os.environ.get('OTP_DELIVERY')!='console' or os.environ.get('FLASK_DEBUG')!='1':
+  return _otp_error('SMS delivery is not configured. Set up an SMS provider before using OTP sign-in.',503)
+ code=f'{secrets.randbelow(1000000):06d}'
+ session['otp_pending']=dict(phone=phone,mode=mode,name=name,email=email,digest=hmac.new(app.secret_key.encode(),code.encode(),hashlib.sha256).hexdigest(),sent_at=now,expires=now+300,attempts=0)
+ _otp_limits[key]=hits+[now]
+ app.logger.warning('LOCAL DEVELOPMENT OTP for %s: %s (never enable console OTP in production)',phone,code)
+ return jsonify(ok=True,message='OTP sent (local demo: check the Flask terminal).',phone=phone)
+
+@app.post('/auth/otp/verify')
+def otp_verify():
+ pending=session.get('otp_pending')
+ if not pending: return _otp_error('Request a new OTP first.')
+ now=time.time()
+ if now>pending['expires']: session.pop('otp_pending',None);return _otp_error('OTP expired. Request a new code.')
+ if pending['attempts']>=5: session.pop('otp_pending',None);return _otp_error('Too many incorrect attempts. Request a new OTP.',429)
+ code=request.form.get('otp','')
+ digest=hmac.new(app.secret_key.encode(),code.encode(),hashlib.sha256).hexdigest()
+ if not (re.fullmatch(r'\d{6}',code) and hmac.compare_digest(digest,pending['digest'])):
+  pending['attempts']+=1;session['otp_pending']=pending
+  return _otp_error('Incorrect OTP. Please try again.')
+ init_db()
+ with sqlite3.connect(DB) as con:
+  if pending['mode']=='register':
+   try:
+    cur=con.execute('INSERT INTO users(full_name,email,password_hash,phone,created_at) VALUES(?,?,?,?,?)',(pending['name'],pending['email'],'',pending['phone'],datetime.now().isoformat(timespec='seconds')))
+    user_id=cur.lastrowid
+   except sqlite3.IntegrityError: return _otp_error('An account with these details already exists.')
+  else:
+   row=con.execute('SELECT id FROM users WHERE phone=?',(pending['phone'],)).fetchone()
+   if not row: return _otp_error('Account not found.')
+   user_id=row[0]
+ session.clear();session['user_id']=user_id;session['csrf_token']=secrets.token_urlsafe(32)
+ return jsonify(ok=True,redirect=safe_next(request.form.get('next')))
+
+@app.route('/register',methods=['GET'])
+def register(): return redirect(url_for('home',auth='register'))
+
+@app.route('/login',methods=['GET'])
 def login():
  if g.user: return redirect(url_for('account'))
- if request.method=='POST':
-  email=request.form.get('email','').strip().lower(); password=request.form.get('password','')
-  key=(request.remote_addr or 'unknown',email); now=time.monotonic()
-  attempts=[t for t in _login_attempts.get(key,[]) if now-t<900]
-  if len(attempts)>=8:
-   flash('Too many sign-in attempts. Please try again in 15 minutes.','error')
-  else:
-   init_db()
-   with sqlite3.connect(DB) as con:
-    con.row_factory=sqlite3.Row
-    user=con.execute('SELECT id,password_hash FROM users WHERE email=?',(email,)).fetchone()
-   if user and check_password_hash(user['password_hash'],password):
-    _login_attempts.pop(key,None)
-    session.clear();session['user_id']=user['id'];session['csrf_token']=secrets.token_urlsafe(32)
-    flash('Signed in successfully.','success')
-    return redirect(safe_next(request.args.get('next') or request.form.get('next')))
-   attempts.append(now);_login_attempts[key]=attempts
-   flash('Invalid email or password.','error')
- return render_template('login.html',active='account')
+ return redirect(url_for('home',auth='login',next=request.args.get('next','')))
 
 @app.get('/account')
 def account():

@@ -1,0 +1,27 @@
+<div class="ep-auth-overlay" id="ep-auth-overlay" hidden>
+  <div class="ep-auth-dialog" role="dialog" aria-modal="true" aria-labelledby="ep-auth-title" tabindex="-1">
+    <button type="button" class="ep-auth-close" aria-label="Close dialog">×</button>
+    <div class="ep-auth-eyebrow" id="ep-auth-eyebrow">JOIN OUR COMMUNITY</div>
+    <h2 id="ep-auth-title">Create your account</h2>
+    <p class="ep-auth-subtitle" id="ep-auth-subtitle">Make your ritual booking journey a little simpler.</p>
+    <div class="ep-auth-steps" id="ep-auth-steps"><div><span id="ep-step-one">1</span><small>Your details</small></div><i></i><div><span id="ep-step-two">2</span><small>Verify OTP</small></div></div>
+    <div class="ep-auth-alert" id="ep-auth-alert" role="alert" hidden></div>
+    <form id="ep-auth-details" class="ep-auth-form">
+      <input type="hidden" name="csrf_token" value="{{csrf_token}}"><input type="hidden" name="mode" id="ep-auth-mode" value="register">
+      <label class="ep-register-only">Full name<input type="text" name="full_name" autocomplete="name" maxlength="100"></label>
+      <label class="ep-register-only">Email address<input type="email" name="email" autocomplete="email" maxlength="254"></label>
+      <label>Mobile number<div class="ep-auth-phone"><span>+91 ▾</span><input type="tel" name="phone" inputmode="numeric" autocomplete="tel-national" placeholder="Enter mobile number" maxlength="10" pattern="[6-9][0-9]{9}" required></div></label>
+      <button class="ep-auth-primary" type="submit">Send OTP →</button>
+    </form>
+    <form id="ep-auth-verify" class="ep-auth-form" hidden>
+      <input type="hidden" name="csrf_token" value="{{csrf_token}}"><input type="hidden" name="next" id="ep-auth-next">
+      <p class="ep-otp-destination">We've sent a 6-digit OTP to<br><strong id="ep-otp-phone"></strong></p>
+      <label class="ep-otp-label">Verification code<input name="otp" id="ep-otp-code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="○ ○ ○ ○ ○ ○" required></label>
+      <div class="ep-otp-resend"><button type="button" id="ep-resend" disabled>Resend OTP</button> <span id="ep-resend-countdown">in 00:30</span></div>
+      <button class="ep-auth-primary" type="submit" id="ep-auth-verify-button">Create account →</button>
+      <button class="ep-auth-back" type="button" id="ep-auth-back">← Change mobile number</button>
+    </form>
+    <p class="ep-auth-switch" id="ep-auth-switch">Already have an account? <button type="button" data-auth-switch="login">Sign in</button></p>
+    <p class="ep-auth-footnote">OTP authentication · Never share your verification code.</p>
+  </div>
+</div>
