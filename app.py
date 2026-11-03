@@ -103,13 +103,17 @@ def otp_send():
  if len(hits)>=5: return _otp_error('Too many OTP requests. Try again later.',429)
  pending=session.get('otp_pending',{})
  if pending.get('sent_at',0)+30>now: return _otp_error('Please wait 30 seconds before requesting another code.',429)
- if os.environ.get('OTP_DELIVERY')!='console' or os.environ.get('FLASK_DEBUG')!='1':
-  return _otp_error('SMS delivery is not configured. Set up an SMS provider before using OTP sign-in.',503)
- code=f'{secrets.randbelow(1000000):06d}'
+ # Dummy OTP works ONLY on localhost. Production requires a real SMS provider.
+ local_host=request.host.split(':')[0] in ('localhost','127.0.0.1','::1','[::1]')
+ demo_mode=local_host and os.environ.get('OTP_DELIVERY','demo')=='demo'
+ console_mode=local_host and os.environ.get('OTP_DELIVERY')=='console'
+ if not (demo_mode or console_mode):
+  return _otp_error('SMS delivery is not configured. Contact the site administrator.',503)
+ code='123456' if demo_mode else f'{secrets.randbelow(1000000):06d}'
  session['otp_pending']=dict(phone=phone,mode=mode,name=name,email=email,digest=hmac.new(app.secret_key.encode(),code.encode(),hashlib.sha256).hexdigest(),sent_at=now,expires=now+300,attempts=0)
  _otp_limits[key]=hits+[now]
- app.logger.warning('LOCAL DEVELOPMENT OTP for %s: %s (never enable console OTP in production)',phone,code)
- return jsonify(ok=True,message='OTP sent (local demo: check the Flask terminal).',phone=phone)
+ app.logger.warning('LOCAL ONLY OTP for %s: %s (never use dummy OTP in production)',phone,code)
+ return jsonify(ok=True,message='Demo OTP: 123456' if demo_mode else 'OTP generated: check the Flask terminal.',phone=phone)
 
 @app.post('/auth/otp/verify')
 def otp_verify():
